@@ -1,6 +1,8 @@
 import yaml
 import json
 import requests
+import logging
+import time
 
 from collections import OrderedDict
 
@@ -11,10 +13,10 @@ class PayPalAPI:
     def paypal_request(self, method, data):
         url = self.config['endpoint'].rstrip("/") + "/" + method
         headers = OrderedDict([
-            ("X-PAYPAL-SECURITY-USERID", config['username']),
-            ("X-PAYPAL-SECURITY-PASSWORD", config['password']),
-            ("X-PAYPAL-SECURITY-SIGNATURE", config['signature']),
-            ("X-PAYPAL-APPLICATION-ID", config['app_id']),
+            ("X-PAYPAL-SECURITY-USERID", self.config['username']),
+            ("X-PAYPAL-SECURITY-PASSWORD", self.config['password']),
+            ("X-PAYPAL-SECURITY-SIGNATURE", self.config['signature']),
+            ("X-PAYPAL-APPLICATION-ID", self.config['app_id']),
             ("X-PAYPAL-REQUEST-DATA-FORMAT", "JSON"),
             ("X-PAYPAL-RESPONSE-DATA-FORMAT", "JSON"),
             ("Content-Type", "application/json")
@@ -24,9 +26,9 @@ class PayPalAPI:
             r = requests.post(url, data=json.dumps(data), headers=headers)
             res = json.loads(r.text)
             response_envelope = res['responseEnvelope']
-
+            logging.debug(res)
             if response_envelope['ack'].startswith("Failure") and\
-                    response_envelope['error']['errorId'] == "520002":
+                    res['error'][0]['errorId'] == "520002":
                 wait_t = 0.5 * pow(2, attempt) # exponential back off
                 time.sleep(wait_t)
             else:
