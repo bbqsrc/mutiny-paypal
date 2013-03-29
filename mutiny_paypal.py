@@ -3,14 +3,42 @@ import json
 import requests
 import logging
 import time
+import re
 
 from collections import OrderedDict
+from urllib.parse import quote, unquote
 
 class PayPalAPI:
     def __init__(self, config):
         self.config = config
 
-    def paypal_request(self, method, data):
+    def nvp_request(self, method, data):
+        url = self.config['endpoint_nvp']
+        payload = OrderedDict([
+            ("USER", self.config['username']),
+            ("PWD", self.config['password']),
+            ("SIGNATURE", self.config['signature']),
+            ("VERSION", "94.0"),
+            ("METHOD", method)
+        ])
+        payload.update(data)
+        payload = self.dict_to_nvp(payload)
+
+        for attempt in range(3):
+            r = requests.post(url, data=payload)
+            res = self.nvp_to_dict(r.text)
+            logging.debug(res)
+            if res['ACK'].startswith("Failure") and\
+                    res['L_ERRORCODE'][0] == "10001":
+                wait_t = 0.5 * pow(2, attempt) # exponential back off
+                time.sleep(wait_t)
+            else:
+                break
+
+        return res
+
+
+    def json_request(self, method, data):
         url = self.config['endpoint'].rstrip("/") + "/" + method
         headers = OrderedDict([
             ("X-PAYPAL-SECURITY-USERID", self.config['username']),
@@ -58,7 +86,44 @@ class PayPalAPI:
             ("itemList", {"item": items}),
             ("requestEnvelope", {"errorLanguage": "en_US"})
         ])}
-        return self.paypal_request("Invoice/CreateAndSendInvoice", data)
+        return self.json_request("Invoice/CreateAndSendInvoice", data)
+
+    def create_button(self, code, btype, bvars):
+        o = OrderedDict()
+        o['BUTTONCODE'] = code
+        o['BUTTONTYPE'] = btype
+        o.update(bvars)
+
+        return self.nvp_request("BMCreateButton", o)
+
+    @classmethod
+    def dict_to_nvp(cls, dct):
+        out = []
+        for key, value in dct.items():
+            if isinstance(value, list):
+                for n, item in enumerate(value):
+                    out.append("%s%s=%s" % (key, n+1, quote(str(item))))
+            else:
+                out.append("%s=%s" % (key, quote(str(value))))
+        return "&".join(out)
+
+    @classmethod
+    def nvp_to_dict(cls, nvp):
+        end_numbers = re.compile(r"(.+?)(\d+)$")
+        out = OrderedDict()
+        splits = OrderedDict([x.split('=') for x in nvp.split("&")])
+
+        for key, value in splits.items():
+            value = unquote(value)
+            result = end_numbers.search(key)
+            if result is not None:
+                if out.get(result.group(1)) is None:
+                    out[result.group(1)] = []
+                out[result.group(1)].append(value)
+            else:
+                out[key] = value
+
+        return out
 
     @classmethod
     def create_biller_info(cls, first_name, last_name, phone, address1, address2, suburb, state, postcode, country="AU"):
