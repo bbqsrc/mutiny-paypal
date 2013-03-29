@@ -88,11 +88,11 @@ class PayPalAPI:
         ])}
         return self.json_request("Invoice/CreateAndSendInvoice", data)
 
-    def create_button(self, code, btype, bvars):
+    def create_button(self, code, btype, bvars=None):
         o = OrderedDict()
         o['BUTTONCODE'] = code
         o['BUTTONTYPE'] = btype
-        o.update(bvars)
+        o.update(bvars or {})
 
         return self.nvp_request("BMCreateButton", o)
 
