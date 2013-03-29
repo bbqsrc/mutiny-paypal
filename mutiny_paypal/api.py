@@ -21,6 +21,12 @@ class PayPalAPI:
             ("VERSION", "94.0"),
             ("METHOD", method)
         ])
+
+        # Stop potential overrides by end-users
+        for x in ('USER', 'PWD', 'SIGNATURE', 'VERSION', 'METHOD'):
+            if data.get(x):
+                del data[x]
+
         payload.update(data)
         payload = self.dict_to_nvp(payload)
 
